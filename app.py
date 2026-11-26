@@ -140,19 +140,35 @@ def pct_change(series):
     return (series.iloc[-1] / series.iloc[0] - 1) * 100
 
 
-# ---------------------------------------------------------------- 입력
-st.title("OIL → FOOD PRICE")
-st.subheader("국제유가의 변화는 우리의 식탁 물가에 어떻게 전달될까?")
+# ---------------------------------------------------------------- 머리말과 입력
+st.markdown(
+    """
+<div style="border-radius:16px;padding:26px 30px;margin-bottom:18px;
+            background:linear-gradient(120deg,#1b2a4a 0%,#2f5fb8 100%);color:white;">
+  <div style="display:inline-block;background:rgba(255,255,255,0.18);border-radius:999px;
+              padding:4px 14px;font-size:0.85rem;font-weight:600;margin-bottom:12px;">
+    두바이유(오피넷) × 국내 휘발유(오피넷) × 식품 물가(KOSIS), 월별 2015.10~2026.10
+  </div>
+  <div style="font-size:2.1rem;font-weight:800;line-height:1.25;">OIL → FOOD PRICE</div>
+  <div style="font-size:1.05rem;margin-top:8px;line-height:1.6;">
+    핵심 질문: “국제유가의 변화는 국내 휘발유를 거쳐 우리의 식탁 물가에 얼마나, 언제 전달될까?”<br>
+    왼쪽에서 분석 기간과 식품 유형을 바꾸면 숫자와 그래프가 함께 바뀝니다.
+  </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
-c1, c2 = st.columns(2)
-with c1:
+with st.sidebar:
+    st.markdown("### 분석 조건")
     preset = st.selectbox("분석 기간", list(PRESETS.keys()))
     if PRESETS[preset] is None:
         s_label, e_label = st.select_slider("시작 달과 끝 달", options=months, value=(months[0], months[-1]))
     else:
         s_label, e_label = PRESETS[preset]
-with c2:
     food = st.selectbox("식품 유형", list(FOODS.keys()), index=list(FOODS).index("축산물"))
+    st.caption("기간 이름은 시기를 나누기 위한 구분일 뿐이고, 코로나 때문에 달라졌다는 뜻은 아닙니다. "
+               "2022년 이후에는 유가 급등이 함께 들어 있습니다.")
 
 start, end = pd.Timestamp(s_label + "-01"), pd.Timestamp(e_label + "-01")
 if (end.year - start.year) * 12 + (end.month - start.month) < 1:
@@ -170,13 +186,55 @@ gf_lag, gf_r = best_of(mat.loc[food])
 oil_chg, gas_chg = pct_change(win["국제유가"]), pct_change(win["휘발유"])
 food_chg, cpi_chg = pct_change(win[food]), pct_change(win["총지수"])
 
-# ---------------------------------------------------------------- 한 줄 요약
-if og_lag is not None and gf_lag is not None:
-    st.info(
-        f"**{period_text}**  두바이유 {oil_chg:+.0f}%, 국내 휘발유 {gas_chg:+.0f}%, {food} 물가 {food_chg:+.1f}%. "
-        f"국제유가는 휘발유와 {og_lag}개월 시차에서 가장 비슷하게 움직였고(상관계수 {og_r:+.2f}), "
-        f"휘발유는 {josa(food, '과', '와')} {gf_lag}개월 시차에서 상관계수가 {gf_r:+.2f}이었습니다."
+# 식품 7개 중 휘발유와 가장 비슷하게 움직인 품목
+_flat = mat.loc[FOOD_GROUPS].stack().dropna()
+if len(_flat):
+    (best_food, best_food_lag), best_food_r = _flat.abs().idxmax(), _flat[_flat.abs().idxmax()]
+else:
+    best_food, best_food_lag, best_food_r = None, None, np.nan
+
+
+def big_card(color, title, big, sub):
+    return (
+        f'<div style="border-top:5px solid {color};border-radius:12px;padding:16px 18px;height:100%;'
+        f'background:rgba(128,128,128,0.12);">'
+        f'<div style="font-size:0.9rem;opacity:0.85;">{title}</div>'
+        f'<div style="font-size:2.2rem;font-weight:800;color:{color};line-height:1.35;">{big}</div>'
+        f'<div style="font-size:0.85rem;opacity:0.85;line-height:1.5;">{sub}</div></div>'
     )
+
+
+k1, k2, k3, k4 = st.columns(4, gap="medium")
+k1.markdown(big_card(C_OIL, "두바이유 (국제유가)", f"{oil_chg:+.0f}%",
+                     f"기간 중 {win['국제유가'].min():,.0f}~{win['국제유가'].max():,.0f}원/L"), unsafe_allow_html=True)
+k2.markdown(big_card(C_GAS, "국내 휘발유", f"{gas_chg:+.0f}%",
+                     f"기간 중 {win['휘발유'].min():,.0f}~{win['휘발유'].max():,.0f}원/L"), unsafe_allow_html=True)
+k3.markdown(big_card(C_FOOD, f"{food} 물가", f"{food_chg:+.1f}%",
+                     f"전체 평균({cpi_chg:+.1f}%)보다 {food_chg - cpi_chg:+.1f}%p"), unsafe_allow_html=True)
+if og_lag is not None:
+    k4.markdown(big_card("#7a5af8", "국제유가 → 휘발유 연결", f"{og_r:+.2f}",
+                         f"{og_lag}개월 시차에서 가장 큼 ({strength(og_r)} 연결)"), unsafe_allow_html=True)
+else:
+    k4.markdown(big_card("#7a5af8", "국제유가 → 휘발유 연결", "계산 불가", "기간이 너무 짧음"), unsafe_allow_html=True)
+
+st.write("")
+
+# 핵심 요약: 숫자를 굵게 넣은 두 문장
+_oil_gas = (f"국제유가와 국내 휘발유는 <b>{og_lag}개월</b> 시차에서 가장 비슷하게 움직였고(상관계수 <b>{og_r:+.2f}</b>), "
+            if og_lag is not None else "")
+_food_part = (f"식품 중에서는 <b>{best_food}</b>{josa(best_food, '이', '가')[len(best_food):]} 휘발유와 가장 비슷했습니다(<b>{best_food_lag}개월</b> 시차, 상관계수 <b>{best_food_r:+.2f}</b>). "
+              if best_food is not None else "")
+_sel_part = (f"선택한 {josa(food, '은', '는')} <b>{gf_lag}개월</b> 시차에서 <b>{gf_r:+.2f}</b>이었습니다."
+             if gf_lag is not None else "")
+st.markdown(
+    f'<div style="border-left:5px solid #4c9be8;border-radius:8px;padding:14px 20px;line-height:1.85;'
+    f'background:rgba(76,155,232,0.12);"><b>핵심 요약 ({period_text})</b><br>'
+    f'두바이유는 <b>{oil_chg:+.0f}%</b>, 국내 휘발유는 <b>{gas_chg:+.0f}%</b> 변했습니다. '
+    f'{_oil_gas}{_food_part}{_sel_part}</div>',
+    unsafe_allow_html=True,
+)
+
+st.write("")
 
 # ---------------------------------------------------------------- KPI
 def takeaway(text):
@@ -194,14 +252,6 @@ with st.container(border=True):
     a2.metric("휘발유 최저", f"{df['휘발유'].min():,.0f}원/L", gmin.strftime("%Y.%m"), delta_color="off")
     a3.metric("두바이유 최고", f"{df['국제유가'].max():,.0f}원/L", omax.strftime("%Y.%m"), delta_color="off")
     a4.metric("두바이유 최저", f"{df['국제유가'].min():,.0f}원/L", omin.strftime("%Y.%m"), delta_color="off")
-
-with st.container(border=True):
-    st.markdown(f"##### 선택 기간({period_text})의 누적 변화")
-    b1, b2, b3, b4 = st.columns(4)
-    b1.metric("두바이유", f"{oil_chg:+.1f}%")
-    b2.metric("국내 휘발유", f"{gas_chg:+.1f}%")
-    b3.metric(f"{food} 물가", f"{food_chg:+.1f}%")
-    b4.metric("전체 소비자물가", f"{cpi_chg:+.1f}%")
 
 st.write("")
 
@@ -320,6 +370,39 @@ with st.container(border=True):
                    "(전년동월대비는 2016.10부터 계산되어 그 이전 달은 빠집니다.)")
     st.caption("두 그래프 모두 전년동월대비 변화율끼리의 상관계수입니다. 1에 가까우면 같이 움직였고, 0이면 관계가 없고, "
                "마이너스면 반대로 움직였습니다. 같이 움직였다는 뜻일 뿐 원인이라는 뜻은 아닙니다.")
+
+st.write("")
+
+# ---------------------------------------------------------------- 한눈에 정리 표
+with st.container(border=True):
+    st.markdown("### 한눈에 정리  식품별 상승률과 휘발유와의 연결")
+    rows_t = []
+    for f in FOOD_GROUPS:
+        lag_f, r_f = best_of(mat.loc[f])
+        if lag_f is None:
+            label = "계산 불가"
+        elif r_f >= 0.4:
+            label = "비슷하게 움직임"
+        elif r_f <= -0.4:
+            label = "반대로 움직임"
+        elif r_f <= -0.2:
+            label = "약하게 반대로 움직임"
+        elif r_f >= 0.2:
+            label = "약한 연결"
+        else:
+            label = "거의 무관"
+        rows_t.append({
+            "식품": f,
+            "기간 상승률(%)": round(float(chg[f]), 1),
+            "전체 평균 대비(%p)": round(float(excess[f]), 1),
+            "휘발유와 가장 비슷한 시차(개월)": lag_f,
+            "상관계수": None if lag_f is None else round(r_f, 2),
+            "읽는 법": label,
+        })
+    tbl = pd.DataFrame(rows_t).sort_values("상관계수", key=lambda x: x.abs(), ascending=False)
+    st.dataframe(tbl, hide_index=True, width="stretch")
+    st.caption("읽는 법은 상관계수 크기로 나눈 구분입니다(0.4 이상, 0.2 이상, 0.2 미만). 이 기준은 이 대시보드가 정한 값이고, "
+               "상관이 있다는 것이 원인이라는 뜻은 아닙니다.")
 
 st.write("")
 
