@@ -49,7 +49,7 @@ EVENTS = [
     (pd.Timestamp("2026-03-01"), "석유 최고가격제 시행(2026.3)"),
 ]
 
-C_OIL, C_GAS, C_FOOD = "#8c6d1f", "#e8833a", "#2f6fb3"
+C_OIL, C_GAS, C_FOOD = "#c9a227", "#e8833a", "#4c9be8"
 
 st.set_page_config(page_title="OIL → FOOD PRICE", layout="wide")
 
@@ -179,94 +179,152 @@ if og_lag is not None and gf_lag is not None:
     )
 
 # ---------------------------------------------------------------- KPI
-st.markdown("##### 전체 기간(2015.10~2026.10)의 가격 범위")
-a1, a2, a3, a4 = st.columns(4)
+def takeaway(text):
+    """차트 위에 두는 한 줄 결론. 이 그래프에서 무엇을 보면 되는지 먼저 말해 준다."""
+    st.info("**한눈에 보기**  " + text)
+
+
 gmax, gmin = df["휘발유"].idxmax(), df["휘발유"].idxmin()
 omax, omin = df["국제유가"].idxmax(), df["국제유가"].idxmin()
-a1.metric("휘발유 최고", f"{df['휘발유'].max():,.0f}원/L", gmax.strftime("%Y.%m"), delta_color="off")
-a2.metric("휘발유 최저", f"{df['휘발유'].min():,.0f}원/L", gmin.strftime("%Y.%m"), delta_color="off")
-a3.metric("두바이유 최고", f"{df['국제유가'].max():,.0f}원/L", omax.strftime("%Y.%m"), delta_color="off")
-a4.metric("두바이유 최저", f"{df['국제유가'].min():,.0f}원/L", omin.strftime("%Y.%m"), delta_color="off")
 
-st.markdown(f"##### 선택 기간({period_text})의 누적 변화")
-b1, b2, b3, b4 = st.columns(4)
-b1.metric("두바이유", f"{oil_chg:+.1f}%")
-b2.metric("국내 휘발유", f"{gas_chg:+.1f}%")
-b3.metric(f"{food} 물가", f"{food_chg:+.1f}%")
-b4.metric("전체 소비자물가", f"{cpi_chg:+.1f}%")
+with st.container(border=True):
+    st.markdown("##### 전체 기간(2015.10~2026.10)의 가격 범위")
+    a1, a2, a3, a4 = st.columns(4)
+    a1.metric("휘발유 최고", f"{df['휘발유'].max():,.0f}원/L", gmax.strftime("%Y.%m"), delta_color="off")
+    a2.metric("휘발유 최저", f"{df['휘발유'].min():,.0f}원/L", gmin.strftime("%Y.%m"), delta_color="off")
+    a3.metric("두바이유 최고", f"{df['국제유가'].max():,.0f}원/L", omax.strftime("%Y.%m"), delta_color="off")
+    a4.metric("두바이유 최저", f"{df['국제유가'].min():,.0f}원/L", omin.strftime("%Y.%m"), delta_color="off")
+
+with st.container(border=True):
+    st.markdown(f"##### 선택 기간({period_text})의 누적 변화")
+    b1, b2, b3, b4 = st.columns(4)
+    b1.metric("두바이유", f"{oil_chg:+.1f}%")
+    b2.metric("국내 휘발유", f"{gas_chg:+.1f}%")
+    b3.metric(f"{food} 물가", f"{food_chg:+.1f}%")
+    b4.metric("전체 소비자물가", f"{cpi_chg:+.1f}%")
+
+st.write("")
 
 # ---------------------------------------------------------------- CHART 01
-st.markdown("### CHART 01  국제유가 충격과 국내 가격의 변화")
-fig1 = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1, row_heights=[0.55, 0.45],
-                     subplot_titles=("두바이유와 국내 휘발유 (원/L)", f"{josa(food, '과', '와')} 전체 소비자물가 (2020=100)"))
-fig1.add_trace(go.Scatter(x=win.index, y=win["국제유가"], name="두바이유", line=dict(color=C_OIL, width=2.5)), row=1, col=1)
-fig1.add_trace(go.Scatter(x=win.index, y=win["휘발유"], name="국내 휘발유", line=dict(color=C_GAS, width=2.5)), row=1, col=1)
-fig1.add_trace(go.Scatter(x=win.index, y=win[food], name=f"{food} 물가지수", line=dict(color=C_FOOD, width=2.5)), row=2, col=1)
-if food != "총지수":
-    fig1.add_trace(go.Scatter(x=win.index, y=win["총지수"], name="총지수", line=dict(color="gray", width=1.5, dash="dash")), row=2, col=1)
+with st.container(border=True):
+    st.markdown("### CHART 01  국제유가 충격과 국내 가격의 변화")
+    oil_swing = (win["국제유가"].max() / win["국제유가"].min() - 1) * 100
+    gas_swing = (win["휘발유"].max() / win["휘발유"].min() - 1) * 100
+    if gas_swing < oil_swing * 0.7:
+        swing_msg = "국제유가의 큰 출렁임이 국내 휘발유에는 훨씬 작게 전달됐습니다."
+    else:
+        swing_msg = "국내 휘발유도 국제유가와 비슷한 폭으로 움직였습니다."
+    takeaway(f"이 기간에 두바이유는 최저 {win['국제유가'].min():,.0f}원/L에서 최고 {win['국제유가'].max():,.0f}원/L까지 "
+             f"{oil_swing:.0f}% 움직였고, 국내 휘발유는 {gas_swing:.0f}% 움직였습니다. {swing_msg}")
 
-cs, ce = max(start, pd.Timestamp(COVID[0] + "-01")), min(end, pd.Timestamp(COVID[1] + "-01"))
-if cs <= ce:
-    fig1.add_shape(type="rect", x0=cs, x1=ce, y0=0, y1=1, xref="x", yref="paper",
-                   fillcolor="rgba(120,120,120,0.12)", line_width=0, layer="below")
-for i, (d, label) in enumerate(EVENTS):
-    if start <= d <= end:
-        fig1.add_shape(type="line", x0=d, x1=d, y0=0, y1=1, xref="x", yref="paper",
-                       line=dict(color="gray", dash="dot", width=1))
-        fig1.add_annotation(x=d, y=1.0 + 0.03 * (i % 2), xref="x", yref="paper", text=label, showarrow=False,
-                            xanchor="left", yanchor="bottom", font=dict(size=10, color="gray"))
-fig1.update_layout(height=560, margin=dict(t=90, b=20), legend=dict(orientation="h", y=-0.1))
-st.plotly_chart(fig1, width="stretch")
-st.caption("회색 음영은 코로나 기간(2020.03~2021.12)입니다. 점선은 주요 사건의 달입니다. "
-           "석유 최고가격제는 정유사 공급가격에 상한을 둔 제도이고 주유소 판매가격에 직접 적용되지는 않았습니다.")
+    fig1 = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.16, row_heights=[0.55, 0.45])
+    fig1.add_trace(go.Scatter(x=win.index, y=win["국제유가"], name="두바이유", line=dict(color=C_OIL, width=2.8)), row=1, col=1)
+    fig1.add_trace(go.Scatter(x=win.index, y=win["휘발유"], name="국내 휘발유", line=dict(color=C_GAS, width=2.8)), row=1, col=1)
+    fig1.add_trace(go.Scatter(x=win.index, y=win[food], name=f"{food} 물가지수", line=dict(color=C_FOOD, width=2.8)), row=2, col=1)
+    if food != "총지수":
+        fig1.add_trace(go.Scatter(x=win.index, y=win["총지수"], name="전체 물가(총지수)",
+                                  line=dict(color="gray", width=1.6, dash="dash")), row=2, col=1)
+
+    # 최고점 표시
+    po, pg = win["국제유가"].idxmax(), win["휘발유"].idxmax()
+    fig1.add_trace(go.Scatter(x=[po], y=[win.loc[po, "국제유가"]], mode="markers+text", showlegend=False,
+                              marker=dict(color=C_OIL, size=10),
+                              text=[f"두바이유 최고 {win.loc[po, '국제유가']:,.0f} ({po.strftime('%Y.%m')})"],
+                              textposition="top left", textfont=dict(size=11, color=C_OIL)), row=1, col=1)
+    fig1.add_trace(go.Scatter(x=[pg], y=[win.loc[pg, "휘발유"]], mode="markers+text", showlegend=False,
+                              marker=dict(color=C_GAS, size=10),
+                              text=[f"휘발유 최고 {win.loc[pg, '휘발유']:,.0f} ({pg.strftime('%Y.%m')})"],
+                              textposition="top right", textfont=dict(size=11, color=C_GAS)), row=1, col=1)
+
+    cs, ce = max(start, pd.Timestamp(COVID[0] + "-01")), min(end, pd.Timestamp(COVID[1] + "-01"))
+    if cs <= ce:
+        fig1.add_shape(type="rect", x0=cs, x1=ce, y0=0, y1=1, xref="x", yref="paper",
+                       fillcolor="rgba(150,150,150,0.14)", line_width=0, layer="below")
+    # 사건 이름은 그래프 위쪽 여백에 높이를 달리해 겹치지 않게 적는다
+    for i, (d, label) in enumerate(EVENTS):
+        if start <= d <= end:
+            fig1.add_shape(type="line", x0=d, x1=d, y0=0, y1=1, xref="x", yref="paper",
+                           line=dict(color="gray", dash="dot", width=1))
+            fig1.add_annotation(x=d, y=1.04 + 0.075 * i, xref="x", yref="paper", text=label, showarrow=False,
+                                xanchor="left", yanchor="bottom", font=dict(size=11, color="gray"))
+    top1 = float(win[["국제유가", "휘발유"]].max().max())
+    fig1.update_yaxes(title_text="원/L", row=1, col=1, range=[0, top1 * 1.22])
+    fig1.update_yaxes(title_text="물가지수 (2020=100)", row=2, col=1)
+    fig1.update_layout(height=640, margin=dict(t=130, b=30, l=10, r=10),
+                       legend=dict(orientation="h", y=-0.1, x=0))
+    st.plotly_chart(fig1, width="stretch")
+    st.caption("위쪽은 두바이유와 국내 휘발유(원/L), 아래쪽은 선택한 식품과 전체 물가의 지수입니다. 회색 음영은 코로나 기간(2020.03~2021.12)입니다. "
+               "국내 휘발유 가격에는 세금이 붙어 있어 국제유가보다 덜 출렁이는 면이 있습니다. "
+               "석유 최고가격제는 정유사 공급가격에 상한을 둔 제도이고 주유소 판매가격에 직접 적용되지는 않았습니다.")
+
+st.write("")
 
 # ---------------------------------------------------------------- CHART 02
-st.markdown("### CHART 02  식품 물가 상승의 승자는 누구인가")
-chg = pd.Series({f: pct_change(win[f]) for f in FOOD_GROUPS}).sort_values()
-excess = chg - cpi_chg
-colors = [C_FOOD if v >= 0 else "#b8bfc7" for v in excess]
-fig2 = go.Figure(go.Bar(
-    x=chg.values, y=chg.index, orientation="h", marker_color=colors,
-    text=[f"{v:+.1f}%  (평균 대비 {e:+.1f}%p)" for v, e in zip(chg.values, excess.values)], textposition="outside",
-))
-fig2.add_vline(x=cpi_chg, line_dash="dash", line_color="gray",
-               annotation_text=f"전체 평균 {cpi_chg:+.1f}%", annotation_position="top")
-span = max(abs(chg).max(), abs(cpi_chg), 1)
-fig2.update_layout(title=f"{period_text}, 첫 달 대비 마지막 달 변화율", xaxis_title="변화율(%)",
-                   xaxis=dict(range=[min(0, chg.min()) - span * 0.1, max(0, chg.max()) + span * 0.55]),
-                   height=430, margin=dict(t=70, b=20))
-st.plotly_chart(fig2, width="stretch")
-st.caption("파란 막대는 전체 소비자물가(총지수)보다 더 오른 품목입니다. 첫 달과 마지막 달만 비교한 값이라 "
-           "채소와 과실처럼 계절 영향이 큰 품목은 고른 달에 따라 달라질 수 있습니다.")
+with st.container(border=True):
+    st.markdown("### CHART 02  식품 물가 상승의 승자는 누구인가")
+    chg = pd.Series({f: pct_change(win[f]) for f in FOOD_GROUPS}).sort_values()
+    excess = chg - cpi_chg
+    n_above = int((excess > 0).sum())
+    top_food = chg.idxmax()
+    takeaway(f"가장 많이 오른 식품은 {top_food}({chg.max():+.1f}%)로 전체 평균({cpi_chg:+.1f}%)보다 {excess[top_food]:+.1f}%p 차이가 납니다. "
+             f"7개 품목 중 평균보다 더 오른 품목은 {n_above}개입니다.")
+    colors = [C_FOOD if v >= 0 else "#b8bfc7" for v in excess]
+    fig2 = go.Figure(go.Bar(
+        x=chg.values, y=chg.index, orientation="h", marker_color=colors,
+        text=[f"{v:+.1f}%  (평균 대비 {e:+.1f}%p)" for v, e in zip(chg.values, excess.values)], textposition="outside",
+    ))
+    fig2.add_vline(x=cpi_chg, line_dash="dash", line_color="gray",
+                   annotation_text=f"전체 평균 {cpi_chg:+.1f}%", annotation_position="top")
+    span = max(abs(chg).max(), abs(cpi_chg), 1)
+    fig2.update_layout(xaxis_title="변화율(%)",
+                       xaxis=dict(range=[min(0, chg.min()) - span * 0.1, max(0, chg.max()) + span * 0.7]),
+                       height=470, margin=dict(t=50, b=30, l=10, r=10))
+    st.plotly_chart(fig2, width="stretch")
+    st.caption(f"{period_text}, 첫 달 대비 마지막 달 변화율입니다. 파란 막대는 전체 평균보다 더 오른 품목입니다. "
+               "첫 달과 마지막 달만 비교한 값이라 채소와 과실처럼 계절 영향이 큰 품목은 고른 달에 따라 달라질 수 있습니다.")
+
+st.write("")
 
 # ---------------------------------------------------------------- CHART 03
-st.markdown("### CHART 03  기름값이 오르면 식품 물가도 따라 오를까")
-left, right = st.columns([1, 1.25])
-with left:
-    figa = go.Figure(go.Bar(
-        x=[f"{int(l)}개월" for l in og["시차"]], y=og["상관계수"],
-        marker_color=[C_OIL if (pd.notna(v) and v >= 0) else "#c0504d" for v in og["상관계수"]],
-        text=[("" if pd.isna(v) else f"{v:+.2f}") for v in og["상관계수"]], textposition="outside"))
-    figa.update_layout(title="국제유가에서 국내 휘발유로", yaxis=dict(title="상관계수", range=[-1, 1.1]),
-                       xaxis_title="두바이유가 휘발유보다 앞선 개월 수", height=420, margin=dict(t=60, b=20))
-    st.plotly_chart(figa, width="stretch")
-with right:
-    figb = go.Figure(go.Heatmap(
-        z=mat.values, x=[f"{l}개월" for l in mat.columns], y=[("▶ " + i if i == food else i) for i in mat.index],
-        zmin=-1, zmax=1, colorscale="RdBu", texttemplate="%{z:.2f}", showscale=True,
-        colorbar=dict(title="상관")))
-    figb.update_layout(title="국내 휘발유에서 식품 물가로", yaxis=dict(autorange="reversed"),
-                       xaxis_title="휘발유가 식품 물가보다 앞선 개월 수", height=420, margin=dict(t=60, b=20))
-    st.plotly_chart(figb, width="stretch")
+with st.container(border=True):
+    st.markdown("### CHART 03  기름값이 오르면 식품 물가도 따라 오를까")
+    fm0 = mat.loc[FOOD_GROUPS]
+    strong = [f for f in FOOD_GROUPS if fm0.loc[f].abs().max() >= 0.4]
+    og_txt = (f"국제유가는 {og_lag}개월 뒤 국내 휘발유와 가장 비슷하게 움직였습니다(상관계수 {og_r:+.2f}, {strength(og_r)} 연결)."
+              if og_lag is not None else "")
+    food_txt = (f"하지만 휘발유에서 식품으로 넘어가면 상관계수가 0.4 이상인 식품은 {', '.join(strong)}뿐이고 나머지는 약합니다."
+                if strong else "휘발유에서 식품으로 넘어가면 상관계수가 0.4 이상인 식품이 없습니다.")
+    takeaway(og_txt + " " + food_txt)
 
-n_used = int(ns.min()) if len(ns) else 0
-if n_used < MIN_N:
-    st.warning(f"상관계수 계산에 쓰인 달이 {n_used}개입니다. {MIN_N}개월보다 적어서 값이 크게 흔들릴 수 있으니 참고용으로만 보세요. "
-               "(전년동월대비는 2016.10부터 계산되어 그 이전 달은 빠집니다.)")
-st.caption("두 그래프 모두 전년동월대비 변화율끼리의 상관계수입니다. 1에 가까우면 같이 움직였고, 0이면 관계가 없고, "
-           "마이너스면 반대로 움직였습니다. 같이 움직였다는 뜻일 뿐 원인이라는 뜻은 아닙니다.")
+    left, right = st.columns([1, 1.25], gap="large")
+    with left:
+        figa = go.Figure(go.Bar(
+            x=[f"{int(l)}개월" for l in og["시차"]], y=og["상관계수"],
+            marker_color=[C_OIL if (pd.notna(v) and v >= 0) else "#c0504d" for v in og["상관계수"]],
+            text=[("" if pd.isna(v) else f"{v:+.2f}") for v in og["상관계수"]], textposition="outside"))
+        figa.update_layout(title="국제유가에서 국내 휘발유로", yaxis=dict(title="상관계수", range=[-1, 1.15]),
+                           xaxis_title="두바이유가 휘발유보다 앞선 개월 수", height=460, margin=dict(t=70, b=30, l=10, r=10))
+        st.plotly_chart(figa, width="stretch")
+    with right:
+        figb = go.Figure(go.Heatmap(
+            z=mat.values, x=[f"{l}개월" for l in mat.columns], y=[("▶ " + i if i == food else i) for i in mat.index],
+            zmin=-1, zmax=1, colorscale="RdBu", texttemplate="%{z:.2f}", showscale=True,
+            colorbar=dict(title="상관")))
+        figb.update_layout(title="국내 휘발유에서 식품 물가로", yaxis=dict(autorange="reversed"),
+                           xaxis_title="휘발유가 식품 물가보다 앞선 개월 수", height=460, margin=dict(t=70, b=30, l=10, r=10))
+        st.plotly_chart(figb, width="stretch")
+
+    n_used = int(ns.min()) if len(ns) else 0
+    if n_used < MIN_N:
+        st.warning(f"상관계수 계산에 쓰인 달이 {n_used}개입니다. {MIN_N}개월보다 적어서 값이 크게 흔들릴 수 있으니 참고용으로만 보세요. "
+                   "(전년동월대비는 2016.10부터 계산되어 그 이전 달은 빠집니다.)")
+    st.caption("두 그래프 모두 전년동월대비 변화율끼리의 상관계수입니다. 1에 가까우면 같이 움직였고, 0이면 관계가 없고, "
+               "마이너스면 반대로 움직였습니다. 같이 움직였다는 뜻일 뿐 원인이라는 뜻은 아닙니다.")
+
+st.write("")
 
 # ---------------------------------------------------------------- INSIGHT
+n_used = int(ns.min()) if len(ns) else 0
 st.markdown("### INSIGHT  기간별 핵심 인사이트")
 
 
