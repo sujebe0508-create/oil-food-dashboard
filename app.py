@@ -299,14 +299,19 @@ def hypo_card(no, text, verdict, sub):
     )
 
 
-st.write("")
-st.markdown(f"#### 세운 가설과 확인 결과 ({period_text})")
-k1, k2, k3 = st.columns(3, gap="medium")
-k1.markdown(hypo_card(1, "국제유가가 오르면 국내 휘발유도 시차를 두고 오른다.", v1, sub1), unsafe_allow_html=True)
-k2.markdown(hypo_card(2, "휘발유가 오르면 운송과 유통 비중이 큰 식품이 농수산물보다 더 뚜렷하게 따라 오른다.", v2, sub2), unsafe_allow_html=True)
-k3.markdown(hypo_card(3, "유가가 급등한 2022년 이후에는 휘발유와 식품 물가의 연결이 코로나 이전보다 강해진다.", v3, sub3), unsafe_allow_html=True)
-st.caption("가설을 세운 이유: 식품은 트럭으로 옮겨지고 운반 비용에는 기름값이 들어갑니다. 반대로 채소와 과실은 날씨와 작황의 영향이 더 큽니다. "
-           "판정 기준은 이 대시보드가 정한 값입니다(가설 1은 같이 움직인 정도 0.6 이상, 가설 2는 두 집단 차이 0.3 이상, 가설 3은 5개 이상 식품에서 0.2 이상 증가).")
+HYPOTHESES = [
+    "국제유가가 오르면 국내 휘발유도 시차를 두고 오른다.",
+    "휘발유가 오르면 운송과 유통 비중이 큰 식품(축산물, 가공식품, 외식)이 농수산물보다 더 뚜렷하게 따라 오른다.",
+    "유가가 급등한 2022년 이후에는 휘발유와 식품 물가의 연결이 코로나 이전보다 강해진다.",
+]
+st.markdown(
+    '<div style="border-left:5px solid #e0a800;border-radius:8px;padding:12px 18px;line-height:1.9;'
+    'background:rgba(224,168,0,0.10);margin:6px 0 10px 0;"><b>확인해 볼 가설</b><br>'
+    + "<br>".join(f"<b>가설 {i + 1}</b>  {h}" for i, h in enumerate(HYPOTHESES))
+    + '<br><span style="font-size:0.85rem;opacity:0.8;">이유: 식품은 트럭으로 옮겨져 운반비에 기름값이 들어갑니다. '
+      '반대로 채소와 과실은 날씨와 작황의 영향이 더 큽니다. 맞는지는 맨 아래 결론에서 확인합니다.</span></div>',
+    unsafe_allow_html=True,
+)
 
 if n_used < MIN_N:
     st.warning(f"선택한 기간은 {n_used}개월이라 짧습니다. 아래 \"같이 움직인 정도\"는 크게 흔들릴 수 있어 참고용으로만 보세요.")
@@ -445,6 +450,28 @@ if int(pre_n.iloc[0]) >= MIN_N and int(post_n.iloc[0]) >= MIN_N:
 st.dataframe(cmp_df, width="stretch")
 how_to_read("표의 같이 움직인 정도는 휘발유가 0~6개월 앞선 경우의 평균입니다. 코로나 기간은 월 수가 적어 참고용입니다. "
             f"월 수가 {MIN_N}개보다 적은 구간의 값은 크게 흔들릴 수 있습니다.")
+
+# ---------------------------------------------------------------- 결론
+st.divider()
+st.markdown("### 결론: 세운 가설은 지지되었을까?")
+_verdicts = [v1, v2, v3]
+_n_ok = sum(v == "지지됨" for v in _verdicts)
+_n_part = sum(v in ("일부 지지", "일부 식품에서만") for v in _verdicts)
+_n_no = sum(v == "지지되지 않음" for v in _verdicts)
+_parts = [f"지지됨 {_n_ok}개"]
+if _n_part:
+    _parts.append(f"일부만 지지 {_n_part}개")
+if _n_no:
+    _parts.append(f"지지되지 않음 {_n_no}개")
+answer(f"가설 3개 중 {', '.join(_parts)}입니다. ({period_text} 기준, 가설 3은 기간과 관계없이 고정 비교)")
+h1, h2, h3 = st.columns(3, gap="medium")
+h1.markdown(hypo_card(1, HYPOTHESES[0], v1, sub1), unsafe_allow_html=True)
+h2.markdown(hypo_card(2, HYPOTHESES[1], v2, sub2), unsafe_allow_html=True)
+h3.markdown(hypo_card(3, HYPOTHESES[2], v3, sub3), unsafe_allow_html=True)
+st.caption("판정 기준은 이 대시보드가 정한 값입니다(가설 1은 같이 움직인 정도 0.6 이상, 가설 2는 두 집단 차이 0.3 이상, "
+           "가설 3은 5개 이상 식품에서 0.2 이상 증가). 같이 움직였다는 것이지 휘발유 때문에 올랐다는 증명은 아닙니다.")
+if n_used < MIN_N:
+    st.warning(f"선택한 기간이 {n_used}개월이라 짧아서 가설 1과 2의 판정은 참고용입니다.")
 
 # ---------------------------------------------------------------- 자세히 보기
 with st.expander("자세히 보기: 시차별 상세 값"):
