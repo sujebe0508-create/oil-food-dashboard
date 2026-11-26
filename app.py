@@ -49,6 +49,13 @@ EVENTS = [
     (pd.Timestamp("2026-03-01"), "석유 최고가격제 시행(2026.3)"),
 ]
 
+QUESTION = "국제유가가 오르면, 어떤 식품 값이 몇 개월 뒤에 따라 오를까?"
+USER_WHO = "유가가 크게 오를 때 어떤 식품 물가를 먼저 살펴야 할지 정해야 하는 물가 담당자 (정책 담당, 식품과 외식업의 가격 담당)"
+USER_WHEN = "유가 급등 뉴스가 나왔을 때, 과거에 어느 식품이 휘발유와 비슷하게 움직였는지 확인해서 점검할 품목의 순서를 정한다"
+USER_LIMIT = "앞으로의 가격을 맞히는 예측 도구가 아니라, 과거 기록을 보는 참고 자료입니다."
+TRANSPORT_FOODS = ["축산물", "가공식품", "외식"]       # 가설 2에서 묶는 식품
+FARM_FOODS = ["곡물", "채소", "과실", "수산물"]
+
 C_OIL, C_GAS, C_FOOD = "#c9a227", "#e8833a", "#4c9be8"
 
 st.set_page_config(page_title="OIL → FOOD PRICE", layout="wide")
@@ -142,16 +149,36 @@ def pct_change(series):
 
 # ---------------------------------------------------------------- 입력
 st.markdown("# OIL → FOOD PRICE")
-st.markdown("##### 국제유가가 오르면 우리 식탁 물가도 오를까? 월별 자료로 확인합니다.")
+st.markdown(f"##### 핵심 질문: {QUESTION}")
+st.markdown(
+    f'<div style="border-left:5px solid #7a5af8;border-radius:8px;padding:12px 18px;line-height:1.8;'
+    f'background:rgba(122,90,248,0.10);margin:6px 0 10px 0;">'
+    f'<b>누가 쓰나</b>: {USER_WHO}<br><b>언제 쓰나</b>: {USER_WHEN}<br><b>한계</b>: {USER_LIMIT}</div>',
+    unsafe_allow_html=True,
+)
 
-with st.sidebar:
-    st.markdown("### 보고 싶은 조건")
-    preset = st.selectbox("분석 기간", list(PRESETS.keys()))
+PERIOD_SHORT = {
+    "전체 (2015.10~2026.10)": "전체",
+    "코로나 이전 (~2020.02)": "코로나 이전",
+    "코로나 기간 (2020.03~2021.12)": "코로나 기간",
+    "2022년 이후 (2022.01~)": "2022년 이후",
+    "직접 선택": "직접 선택",
+}
+
+with st.container(border=True):
+    st.markdown("##### 조건을 골라 보세요  (고르면 아래 내용이 모두 바뀝니다)")
+    st.markdown("**① 언제를 볼까요**")
+    _p = st.segmented_control("분석 기간", list(PRESETS.keys()), default=list(PRESETS.keys())[0],
+                              format_func=lambda k: PERIOD_SHORT[k], label_visibility="collapsed", key="period")
+    preset = _p or list(PRESETS.keys())[0]
     if PRESETS[preset] is None:
         s_label, e_label = st.select_slider("시작 달과 끝 달", options=months, value=(months[0], months[-1]))
     else:
         s_label, e_label = PRESETS[preset]
-    food = st.selectbox("식품 유형", list(FOODS.keys()), index=list(FOODS).index("축산물"))
+        st.caption(f"선택한 기간: {s_label} ~ {e_label}")
+    st.markdown("**② 어떤 식품을 볼까요**")
+    _f = st.pills("식품 유형", list(FOODS.keys()), default="축산물", label_visibility="collapsed", key="food")
+    food = _f or "축산물"
     st.caption("기간 이름은 시기를 나누려는 구분입니다. 2022년 이후에는 코로나와 유가 급등이 함께 들어 있어서, "
                "차이가 코로나 때문이라고 말할 수는 없습니다.")
 
@@ -221,25 +248,65 @@ def how_to_read(text):
     st.caption("읽는 법: " + text)
 
 
-# ---------------------------------------------------------------- 결론 카드 3개
-st.write("")
-st.markdown(f"#### 결론부터 ({period_text})")
-k1, k2, k3 = st.columns(3, gap="medium")
+# ---------------------------------------------------------------- 가설과 확인 결과
+def verdict_colors(v):
+    return {"지지됨": "#1f9d55", "일부 지지": "#e0a800", "일부 식품에서만": "#e0a800",
+            "지지되지 않음": "#d9534f", "판단 보류": "#8a8f98"}.get(v, "#8a8f98")
+
+
+# 가설 1: 국제유가 -> 휘발유 (선택 기간 기준)
 if og_lag is not None:
-    k1.markdown(word_card("#c9a227", "1 국제유가 → 국내 휘발유",
-                          "강하게 연결" if og_r >= 0.6 else "어느 정도 연결" if og_r >= 0.3 else "약하게 연결",
-                          f"국제유가가 오르면 {when(og_lag)} 휘발유가 가장 비슷하게 따라 움직였습니다."), unsafe_allow_html=True)
+    v1 = "지지됨" if og_r >= 0.6 else "일부 지지" if og_r >= 0.3 else "지지되지 않음"
+    sub1 = f"국제유가가 오르면 {when(og_lag)} 휘발유가 가장 비슷하게 따라 움직였습니다(같이 움직인 정도 {og_r:+.2f})."
 else:
-    k1.markdown(word_card("#c9a227", "1 국제유가 → 국내 휘발유", "계산 불가", "기간이 너무 짧습니다."), unsafe_allow_html=True)
-if strong:
-    head2 = "품목마다 다름" if none_ else "대체로 연결"
-    sub2 = f"비슷하게 움직인 식품: {', '.join(strong)}" + (f". 거의 관계없는 식품: {', '.join(none_)}" if none_ else "")
+    v1, sub1 = "판단 보류", "선택한 기간이 너무 짧습니다."
+
+# 가설 2: 운송 비중이 큰 식품 vs 농수산물 (선택 기간 기준)
+a_vals = [best[f][1] for f in TRANSPORT_FOODS if best[f][0] is not None]
+b_vals = [best[f][1] for f in FARM_FOODS if best[f][0] is not None]
+if a_vals and b_vals:
+    a_mean, b_mean = float(np.mean(a_vals)), float(np.mean(b_vals))
+    gap = a_mean - b_mean
+    v2 = "지지됨" if gap >= 0.3 else "일부 지지" if gap >= 0.1 else "지지되지 않음"
+    sub2 = f"운송 비중이 큰 식품(축산물, 가공식품, 외식)은 평균 {a_mean:+.2f}, 농수산물(곡물, 채소, 과실, 수산물)은 평균 {b_mean:+.2f}입니다."
 else:
-    head2 = "거의 연결 없음"
-    sub2 = "휘발유와 비슷하게 움직인 식품이 없었습니다."
-k2.markdown(word_card("#4c9be8", "2 국내 휘발유 → 식품", head2, sub2), unsafe_allow_html=True)
-k3.markdown(word_card("#e8833a", "3 가장 많이 오른 식품", f"{top_food} {chg.max():+.0f}%",
-                      f"같은 기간 전체 물가는 {cpi_chg:+.0f}% 올랐습니다."), unsafe_allow_html=True)
+    v2, sub2 = "판단 보류", "선택한 기간이 너무 짧습니다."
+
+# 가설 3: 코로나 이전 vs 2022년 이후 (기간 선택과 관계없이 고정 비교)
+_pre_m, _pre_n = gas_food_matrix(pd.Timestamp(PRE[0] + "-01"), pd.Timestamp(PRE[1] + "-01"))
+_post_m, _post_n = gas_food_matrix(pd.Timestamp(POST[0] + "-01"), pd.Timestamp(POST[1] + "-01"))
+if int(_pre_n.iloc[0]) >= MIN_N and int(_post_n.iloc[0]) >= MIN_N:
+    _d = pd.Series({f: _post_m.loc[f].dropna().mean() - _pre_m.loc[f].dropna().mean() for f in FOOD_GROUPS})
+    up_foods = [f for f in FOOD_GROUPS if _d[f] >= 0.2]
+    down_foods = [f for f in FOOD_GROUPS if _d[f] <= -0.2]
+    v3 = "지지됨" if len(up_foods) >= 5 else "일부 식품에서만" if up_foods else "지지되지 않음"
+    sub3 = (f"2022년 이후 연결이 0.2 이상 강해진 식품: {', '.join(up_foods) if up_foods else '없음'}. "
+            f"오히려 약해진 식품: {', '.join(down_foods) if down_foods else '없음'}. (기간 선택과 관계없이 고정 비교)")
+else:
+    v3, sub3 = "판단 보류", "구간별 월 수가 적습니다."
+
+
+def hypo_card(no, text, verdict, sub):
+    c = verdict_colors(verdict)
+    return (
+        f'<div style="border-top:6px solid {c};border-radius:12px;padding:16px 18px;height:100%;'
+        f'background:rgba(128,128,128,0.10);">'
+        f'<div style="font-size:0.9rem;font-weight:700;opacity:0.75;">가설 {no}</div>'
+        f'<div style="font-size:1rem;font-weight:600;line-height:1.55;margin:4px 0 8px 0;">{text}</div>'
+        f'<div style="display:inline-block;font-size:1.05rem;font-weight:800;color:white;background:{c};'
+        f'border-radius:999px;padding:3px 14px;margin-bottom:8px;">{verdict}</div>'
+        f'<div style="font-size:0.9rem;line-height:1.6;">{sub}</div></div>'
+    )
+
+
+st.write("")
+st.markdown(f"#### 세운 가설과 확인 결과 ({period_text})")
+k1, k2, k3 = st.columns(3, gap="medium")
+k1.markdown(hypo_card(1, "국제유가가 오르면 국내 휘발유도 시차를 두고 오른다.", v1, sub1), unsafe_allow_html=True)
+k2.markdown(hypo_card(2, "휘발유가 오르면 운송과 유통 비중이 큰 식품이 농수산물보다 더 뚜렷하게 따라 오른다.", v2, sub2), unsafe_allow_html=True)
+k3.markdown(hypo_card(3, "유가가 급등한 2022년 이후에는 휘발유와 식품 물가의 연결이 코로나 이전보다 강해진다.", v3, sub3), unsafe_allow_html=True)
+st.caption("가설을 세운 이유: 식품은 트럭으로 옮겨지고 운반 비용에는 기름값이 들어갑니다. 반대로 채소와 과실은 날씨와 작황의 영향이 더 큽니다. "
+           "판정 기준은 이 대시보드가 정한 값입니다(가설 1은 같이 움직인 정도 0.6 이상, 가설 2는 두 집단 차이 0.3 이상, 가설 3은 5개 이상 식품에서 0.2 이상 증가).")
 
 if n_used < MIN_N:
     st.warning(f"선택한 기간은 {n_used}개월이라 짧습니다. 아래 \"같이 움직인 정도\"는 크게 흔들릴 수 있어 참고용으로만 보세요.")
@@ -247,7 +314,7 @@ if n_used < MIN_N:
 st.divider()
 
 # ---------------------------------------------------------------- 1단계
-st.markdown("### 1. 국제유가가 오르면 국내 휘발유도 오를까?")
+st.markdown("### 1. 국제유가가 오르면 국내 휘발유도 오를까? (가설 1)")
 if og_lag is not None:
     answer(f"{'네, ' if og_r >= 0.3 else '별로 그렇지 않았습니다. '}{strength(og_r)} 편입니다. 국제유가는 {oil_swing:.0f}% 출렁였는데 국내 휘발유는 {gas_swing:.0f}%만 움직였습니다. "
            f"국제유가가 움직이면 {when(og_lag)} 휘발유가 가장 비슷하게 따라갔습니다.")
@@ -285,7 +352,7 @@ st.caption(f"전체 기간 휘발유 최고 {df['휘발유'].max():,.0f}원/L({d
 st.divider()
 
 # ---------------------------------------------------------------- 2단계
-st.markdown("### 2. 휘발유가 오르면 식품 값도 오를까?")
+st.markdown("### 2. 휘발유가 오르면 식품 값도 오를까? (가설 2)")
 if strong:
     answer(f"식품마다 달랐습니다. {josa(', '.join(strong), '은', '는')} 휘발유와 비슷하게 움직였고, "
            + (f"{josa(', '.join(none_), '은', '는')} 거의 관계가 없었습니다." if none_ else "나머지는 약했습니다."))
@@ -344,7 +411,7 @@ how_to_read("두 값을 모두 선택 기간의 첫 달 100으로 맞췄습니�
 st.divider()
 
 # ---------------------------------------------------------------- 기간별 비교
-st.markdown("### 5. 기간별로 달라졌을까?")
+st.markdown("### 5. 기간별로 달라졌을까? (가설 3)")
 
 
 def avg_corr(series):
