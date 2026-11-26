@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-DATA = Path(__file__).parent / "data"
+DATA = Path(__file__).parent
 MAX_LAG = 6
 MIN_MONTHS_FOR_CORR = 24
 POLICY_DATE = pd.Timestamp("2026-03-01")  # 석유 최고가격제 시행(2026.3.13) 달
